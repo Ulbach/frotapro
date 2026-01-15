@@ -1,0 +1,7 @@
+{
+  "name": "Controle de Frota Pro",
+  "description": "Um aplicativo moderno e responsivo para gestão de saída e entrada de veículos com integração ao Google Sheets.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
