@@ -37,10 +37,31 @@
   <script type="text/babel">
     const {useState,useEffect,useCallback,useMemo} = React;
 
+    // --- JSONP dispatcher (HOTFIX) ---
+    // Garante que as callbacks existam ANTES de qualquer script JSONP do GAS chegar.
+    window._jsonpWaiters = window._jsonpWaiters || { lista: [], historico: [] };
+    window.listaCallback = function (data) {
+      const q = window._jsonpWaiters.lista.splice(0);
+      q.forEach(fn => { try { fn(data); } catch(e){} });
+    };
+    window.historicoCallback = function (data) {
+      const q = window._jsonpWaiters.historico.splice(0);
+      q.forEach(fn => { try { fn(data); } catch(e){} });
+    };
+
     const getUrl=()=>localStorage.getItem('FROTA_SCRIPT_URL')||'';
     const isValidUrl=u=>{ try{ const x=new URL(u); return x.hostname==='script.google.com' && x.pathname.endsWith('/exec'); }catch{return false} };
 
-    const jsonp=(url,cb)=>new Promise((res,rej)=>{ const s=document.createElement('script'); const prev=window[cb]; window[cb]=d=>{ try{res(d);} finally { if(prev) window[cb]=prev; else delete window[cb]; s.remove(); } }; s.src=url; s.onerror=()=>{ try{ if(prev) window[cb]=prev; else delete window[cb]; } finally { s.remove(); } rej(); }; document.head.appendChild(s); });
+    // JSONP com fila + timeout (8s)
+    const jsonp=(url,cbName)=>new Promise((resolve,reject)=>{
+      const bucket = cbName==='listaCallback' ? 'lista' : 'historico';
+      window._jsonpWaiters[bucket].push(resolve);
+      const s=document.createElement('script');
+      s.src=url; s.async=true;
+      s.onerror=()=>{ const q=window._jsonpWaiters[bucket]; const i=q.indexOf(resolve); if(i>=0) q.splice(i,1); reject(new Error('JSONP load error')); try{s.remove();}catch{} };
+      document.head.appendChild(s);
+      setTimeout(()=>{ const q=window._jsonpWaiters[bucket]; const i=q.indexOf(resolve); if(i>=0) q.splice(i,1); reject(new Error('JSONP timeout')); try{s.remove();}catch{} },8000);
+    });
 
     const sheetsService={
       getListas:async()=>{ const u=getUrl(); if(!u) return {veiculos:[],motoristas:[],segurancas:[]}; try{ const d=await jsonp(`${u}?action=getlistas&_ts=${Date.now()}`,'listaCallback'); const safe=d&&typeof d==='object'?d:{}; return { veiculos:Array.isArray(safe.veiculos)?safe.veiculos:[], motoristas:Array.isArray(safe.motoristas)?safe.motoristas:[], segurancas:Array.isArray(safe.segurancas)?safe.segurancas:[], }; }catch{return {veiculos:[],motoristas:[],segurancas:[]}} },
@@ -110,7 +131,6 @@
 
       const veiculosFiltrados=useMemo(()=>{ const fora=historico.filter(h=>h.status==='FORA').map(h=>h.veiculo); return tipo==='SAIDA'?listas.veiculos.filter(v=>!fora.includes(v)):listas.veiculos.filter(v=>fora.includes(v)); },[tipo,listas.veiculos,historico]);
 
-      // CORRIGIDO: usa camelCase do backend
       const kmAnterior=useMemo(()=>{ if(!formData.veiculo) return null; const entries=historico.filter(h=>h.veiculo===formData.veiculo); if(!entries.length) return null; const last=entries[entries.length-1]; return last.status==='FORA'? Number(last.kmSaida||0) : Number(last.kmRetorno||0); },[formData.veiculo,historico]);
 
       const isKmInvalido=useMemo(()=>{ if(kmAnterior===null || formData.km==='') return false; const kmAtual=Number(formData.km); return Number.isFinite(kmAtual)&&Number.isFinite(kmAnterior)&&kmAtual<kmAnterior; },[formData.km,kmAnterior]);
@@ -209,7 +229,7 @@
       const [showSettings,setShowSettings]=useState(!getUrl());
       const [urlInput,setUrlInput]=useState(getUrl());
 
-      const loadData=useCallback(async(silent=false)=>{ if(!silent) setLoading(true); try{ const [l,h]=await Promise.all([sheetsService.getListas(),sheetsService.getHistorico()]); setListas(l||{veiculos:[],motoristas:[],segurancas:[]}); setHistorico(Array.isArray(h)?h:[]); } finally { setLoading(false); } },[]);
+      const loadData=useCallback(async(silent=false)=>{ if(!silent) setLoading(true); try{ const [l,h]=await Promise.allSettled([sheetsService.getListas(),sheetsService.getHistorico()]); const listasOk = l.status==='fulfilled'? l.value : {veiculos:[],motoristas:[],segurancas:[]}; const historicoOk = h.status==='fulfilled'? h.value : []; setListas(listasOk||{veiculos:[],motoristas:[],segurancas:[]}); setHistorico(Array.isArray(historicoOk)?historicoOk:[]); } finally { setLoading(false); } },[]);
 
       useEffect(()=>{ loadData(); },[loadData]);
 

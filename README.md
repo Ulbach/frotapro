@@ -1,37 +1,19 @@
-# Frota Pro — Patch compatível com sua planilha atual
+# Frota Pro — HOTFIX JSONP + compat com sua planilha
 
-Este pacote contém:
+**O que inclui:**
+- `index.html`: hotfix do JSONP (callbacks globais + fila + timeout), correções de kmAnterior/kmRodado e datas; loader sempre sai (allSettled).
+- `Code.gs`: Apps Script lendo **por nome de cabeçalho** e gravando compatível com `dadosSaida`.
 
-- `index.html` — seu layout antigo, **corrigido** (datas camelCase, kmAnterior/kmRodado e loader).
-- `Code.gs` — Apps Script que **lê/grava por nome de coluna**, compatível com sua aba `Historico` (com `dadosSaida`).
-
-## Como usar
-
-1) **Apps Script**
-   - Abra https://script.google.com/ → seu projeto.
-   - Substitua o conteúdo do `Code.gs` pelo deste pacote.
-   - Confirme `SPREADSHEET_ID` no topo.
-   - **Implantar → Gerenciar implantações → Editar → Salvar nova versão**.
-   - Quem tem acesso: **Qualquer pessoa com o link** | Executar como: **Você**.
-   - Copie a URL que termina com `/exec`.
-
-2) **Frontend (GitHub Pages)**
-   - Substitua o `index.html` no seu repositório (raiz ou `docs/`).
-   - Abra o site → engrenagem → cole a URL `/exec` → **Salvar URL**.
-   - Clique em **Atualizar** no Dashboard.
+## Como publicar
+1. **Apps Script**
+   - Abra seu projeto → substitua `Code.gs` por este → Implante nova versão do **Aplicativo da web**.
+   - Executar como: **Você** | Acesso: **Qualquer pessoa com o link**.
+   - Copie a URL que termina com **/exec**.
+2. **GitHub Pages**
+   - Substitua `index.html` no repositório.
+   - Abra o site → engrenagem → cole a URL **/exec** → Salvar.
 
 ## Testes
-
-- GET (JSONP):
-  - `.../exec?action=getlistas&_ts=123` → deve responder `listaCallback({...})`.
-  - `.../exec?action=gethistorico&_ts=123` → deve responder `historicoCallback([...])`.
-- POST (Salvar):
-  - Ao confirmar, na aba Network a resposta do POST deve conter:
-    `<script>parent.salvoCallback({ok:true})</script>`.
-
-## Observações
-
-- O backend retorna **camelCase** (`kmSaida`, `kmRetorno`, `dataSaida`, `dataRetorno`) e também as chaves minúsculas para compatibilidade.
-- O cálculo do **KM ANTERIOR** agora usa o último registro do veículo:
-  - Se o último `status` for `FORA` → usa `kmSaida` daquele registro.
-  - Se for `DISPONÍVEL` → usa `kmRetorno`.
+- GET: `.../exec?action=getlistas&_ts=123` → `listaCallback(...)`
+- GET: `.../exec?action=gethistorico&_ts=123` → `historicoCallback(...)`
+- POST: confirme um registro e veja a resposta com `<script>parent.salvoCallback({ok:true})</script>`.
