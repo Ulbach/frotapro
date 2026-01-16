@@ -1,544 +1,114 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Frota Pro | Gestão de Veículos</title>
-
-  <!-- TailwindCSS -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Fonte -->
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-
-  <style>
-    :root{color-scheme:light only}
-    body{
-      font-family:'Inter',sans-serif;
-      background:#F8FAFC;
-      color:#1E293B;
-      margin:0;
-      -webkit-tap-highlight-color:transparent
-    }
-    .header-container{
-      background-image:linear-gradient(rgba(0,0,0,.3),rgba(15,23,42,.9)),url('https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&q=80&w=800');
-      background-size:cover;background-position:center;
-      border-bottom-left-radius:3rem;border-bottom-right-radius:3rem;height:180px
-    }
-    .glass-btn{
-      background:rgba(255,255,255,.2);
-      backdrop-filter:blur(10px);
-      border:1px solid rgba(255,255,255,.1);
-      transition:all .2s
-    }
-    .glass-btn:active{background:rgba(255,255,255,.4)}
-    .action-card{
-      background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.05);
-      border-radius:2rem;transition:transform .2s
-    }
-    .action-card:active{transform:scale(.95)}
-    .status-pill{
-      background:#F0FDF4;color:#10B981;font-size:10px;
-      font-weight:800;padding:6px 12px;border-radius:10px;text-transform:uppercase
-    }
-    .status-pill-out{background:#FEF2F2;color:#EF4444}
-
-    .loader{
-      border:4px solid #E2E8F0;border-top:4px solid #10B981;
-      border-radius:50%;width:40px;height:40px;margin:2rem auto;
-      animation:spin 1s linear infinite
-    }
-    @keyframes spin{to{transform:rotate(360deg)}}
-
-    select,input{font-size:14px!important;font-weight:500!important}
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Frota Pro | Gestão de Veículos</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+body{font-family:'Inter',sans-serif;background:#F8FAFC;color:#1E293B;margin:0;-webkit-tap-highlight-color:transparent}
+.header-container{background-image:linear-gradient(rgba(0,0,0,.3),rgba(15,23,42,.9)),url('https://images.unsplash.com/photo-1541899481282-d53bffe3c35d?auto=format&fit=crop&q=80&w=800');background-size:cover;background-position:center;border-bottom-left-radius:3rem;border-bottom-right-radius:3rem;height:180px}
+.loader{border:4px solid #E2E8F0;border-top:4px solid #10B981;border-radius:50%;width:40px;height:40px;margin:2rem auto;animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.glass-btn{background:rgba(255,255,255,.2);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.1);transition:all .2s}
+.glass-btn:active{background:rgba(255,255,255,.4)}
+.action-card{background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.05);border-radius:2rem;transition:transform .2s}
+.action-card:active{transform:scale(.95)}
+.status-pill{background:#F0FDF4;color:#10B981;font-size:10px;font-weight:800;padding:6px 12px;border-radius:10px;text-transform:uppercase}
+.status-pill-out{background:#FEF2F2;color:#EF4444}
+#root:empty::before{content:"";display:block;width:30px;height:30px;border:3px solid #E2E8F0;border-top:3px solid #10B981;border-radius:50%;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);animation:spin 1s linear infinite}
+@keyframes spin{0%{transform:translate(-50%,-50%) rotate(0deg)}100%{transform:translate(-50%,-50%) rotate(360deg)}}
+select,input{font-size:14px!important;font-weight:500!important}
+</style>
 </head>
 <body>
-  <div id="root"></div>
-
-  <!-- React 18 -->
-  <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <!-- Babel -->
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
-  <script type="text/babel">
-    const { useState, useEffect, useCallback, useMemo } = React;
-
-    /* ===== Utils ===== */
-    const getUrl = () => localStorage.getItem('FROTA_SCRIPT_URL') || '';
-
-    const isValidUrl = (u) => {
-      try {
-        const x = new URL(u);
-        return x.hostname === 'script.google.com' && x.pathname.endsWith('/exec');
-      } catch {
-        return false;
-      }
-    };
-
-    const jsonp = (url, cb) => new Promise((res, rej) => {
-      const s = document.createElement('script');
-      const name = cb;
-      const prev = window[name];
-      window[name] = (d) => {
-        try { res(d); } finally {
-          if (prev) window[name] = prev; else delete window[name];
-          s.remove();
-        }
-      };
-      s.src = url;
-      s.onerror = () => {
-        try { if (prev) window[name] = prev; else delete window[name]; } finally { s.remove(); }
-        rej(new Error('JSONP load error'));
-      };
-      document.head.appendChild(s);
-    });
-
-    const normalizeHistoricoEntry = (h) => {
-      if (!h || typeof h !== 'object') return h;
-      return {
-        ...h,
-        kmSaida:     h.kmSaida     ?? h.kmsaida     ?? h.km_saida     ?? 0,
-        kmRetorno:   h.kmRetorno   ?? h.kmretorno   ?? h.km_retorno   ?? 0,
-        dataSaida:   h.dataSaida   ?? h.datasaida   ?? h.data_saida   ?? '',
-        dataRetorno: h.dataRetorno ?? h.dataretorno ?? h.data_retorno ?? '',
-        destino:     h.destino     ?? h.Destino     ?? '---',
-      };
-    };
-
-    const sheetsService = {
-      getListas: async () => {
-        const u = getUrl();
-        if (!u) return { veiculos: [], motoristas: [], segurancas: [] };
-        try {
-          const d = await jsonp(`${u}?action=getlistas&_ts=${Date.now()}`, 'listaCallback');
-          const safe = d && typeof d === 'object' ? d : {};
-          return {
-            veiculos: Array.isArray(safe.veiculos) ? safe.veiculos : [],
-            motoristas: Array.isArray(safe.motoristas) ? safe.motoristas : [],
-            segurancas: Array.isArray(safe.segurancas) ? safe.segurancas : [],
-          };
-        } catch {
-          return { veiculos: [], motoristas: [], segurancas: [] };
-        }
-      },
-
-      getHistorico: async () => {
-        const u = getUrl();
-        if (!u) return [];
-        try {
-          const d = await jsonp(`${u}?action=gethistorico&_ts=${Date.now()}`, 'historicoCallback');
-          const arr = Array.isArray(d) ? d : [];
-          return arr.map(normalizeHistoricoEntry);
-        } catch {
-          return [];
-        }
-      },
-
-      salvar: async (dados) => {
-        const u = getUrl();
-        if (!u) return false;
-
-        return new Promise((res) => {
-          const fid = 'frm' + Date.now();
-          const ifr = document.createElement('iframe');
-          const frm = document.createElement('form');
-
-          ifr.name = fid;
-          ifr.style.display = 'none';
-
-          frm.method = 'POST';
-          frm.target = fid;
-          frm.action = u;
-          frm.enctype = 'text/plain';
-
-          const inp = document.createElement('input');
-          inp.name = 'postData';
-          inp.value = JSON.stringify(dados);
-
-          frm.appendChild(inp);
-          document.body.appendChild(ifr);
-          document.body.appendChild(frm);
-
-          const cleanup = () => {
-            try { ifr.remove(); } catch {}
-            try { frm.remove(); } catch {}
-            try { delete window.salvoCallback; } catch {}
-          };
-
-          window.salvoCallback = (r) => {
-            res(!!(r && r.ok));
-            cleanup();
-          };
-
-          frm.submit();
-
-          setTimeout(() => {
-            res(false);
-            cleanup();
-          }, 7000);
-        });
-      },
-    };
-
-    const Dashboard = ({ listas, historico, onAction, onRefresh }) => {
-      const historicoMemo = useMemo(() => historico.slice().reverse().slice(0, 5), [historico]);
-      const fmt = (d) =>
-        d
-          ? new Date(d).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
-          : '--/-- --:--';
-
-      return (
-        <div className="px-6 mt-14 space-y-8 pb-10">
-          <div className="grid grid-cols-2 gap-4">
-            <button onClick={() => onAction('SAIDA')} className="action-card p-6 flex flex-col items-center gap-4 text-center border border-white" aria-label="Registrar Saída">
-              <div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
-                  <polyline points="16 17 21 12 16 7"></polyline>
-                  <line x1="21" y1="12" x2="9" y2="12"></line>
-                </svg>
-              </div>
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Reg. Saída</span>
-            </button>
-
-            <button onClick={() => onAction('RETORNO')} className="action-card p-6 flex flex-col items-center gap-4 text-center border border-white" aria-label="Registrar Entrada">
-              <div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center">
-                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path>
-                  <polyline points="10 17 15 12 10 7"></polyline>
-                  <line x1="15" y1="12" x2="3" y2="12"></line>
-                </svg>
-              </div>
-              <span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Reg. Entrada</span>
-            </button>
-          </div>
-
-          <div className="space-y-4">
-            <div className="flex justify-between items-center px-2">
-              <div className="flex items-center gap-2 opacity-40">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="3" width="7" height="7"></rect>
-                  <rect x="14" y="14" width="7" height="7"></rect>
-                  <rect x="3" y="14" width="7" height="7"></rect>
-                </svg>
-                <h2 className="text-[10px] font-black uppercase tracking-widest">Movimentação (Top 5)</h2>
-              </div>
-              <button onClick={onRefresh} className="text-slate-300 hover:text-emerald-500 transition-transform active:rotate-180" aria-label="Atualizar">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="23 4 23 10 17 10"></polyline>
-                  <polyline points="1 20 1 14 7 14"></polyline>
-                  <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
-                </svg>
-              </button>
-            </div>
-
-            <div className="space-y-3">
-              {historicoMemo.map((log, i) => (
-                <div key={i} className="bg-white p-5 rounded-[1.8rem] flex items-center gap-4 shadow-sm border border-white">
-                  <div className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center shrink-0">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 16l-4-4-4 4"></path>
-                      <line x1="18" y1="8" x2="6" y2="8"></line>
-                      <line x1="6" y1="16" x2="18" y2="16"></line>
-                    </svg>
-                  </div>
-
-                  <div className="flex-1 min-w-0">
-                    <h3 className="font-bold text-slate-800 text-[13px] uppercase tracking-tight truncate">{log.veiculo}</h3>
-                    <p className="text-[10px] text-slate-400 font-bold uppercase truncate mb-1">{log.motorista}</p>
-
-                    <div className="flex items-center gap-1.5 opacity-60">
-                      <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500">
-                        <circle cx="12" cy="12" r="10"></circle>
-                        <polyline points="12 6 12 12 16 14"></polyline>
-                      </svg>
-                      <span className="text-[9px] font-bold text-slate-500 uppercase">
-                        {new Date((log.status === 'FORA' ? log.dataSaida : log.dataRetorno) || '').toString() !== 'Invalid Date'
-                          ? new Date(log.status === 'FORA' ? log.dataSaida : log.dataRetorno).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' })
-                          : '--/-- --:--'}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className={`status-pill ${log.status === 'FORA' ? 'status-pill-out' : ''}`}>
-                    {log.status === 'FORA' ? 'Em Uso' : 'Pátio'}
-                  </div>
-                </div>
-              ))}
-              {!historicoMemo.length && (
-                <p className="text-center text-[10px] text-slate-400 font-bold">Nenhum registro encontrado</p>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    };
-
-    const Formulario = ({ tipo, listas, historico, onSucesso, onVoltar }) => {
-      const [loading, setLoading] = useState(false);
-      const [formData, setFormData] = useState({ veiculo:'', motorista:'', seguranca:'', km:'', destino:'' });
-      const [err, setErr] = useState('');
-
-      const veiculosFiltrados = useMemo(() => {
-        const fora = historico.filter(h => h.status === 'FORA').map(h => h.veiculo);
-        return tipo === 'SAIDA'
-          ? listas.veiculos.filter(v => !fora.includes(v))
-          : listas.veiculos.filter(v =>  fora.includes(v));
-      }, [tipo, listas.veiculos, historico]);
-
-      const kmAnterior = useMemo(() => {
-        if (!formData.veiculo) return null;
-        const entries = historico.filter(h => h.veiculo === formData.veiculo);
-        if (!entries.length) return null;
-        const last = entries[entries.length - 1];
-        return last.status === 'FORA' ? Number(last.kmSaida || 0) : Number(last.kmRetorno || 0);
-      }, [formData.veiculo, historico]);
-
-      const isKmInvalido = useMemo(() => {
-        if (kmAnterior === null || formData.km === '') return false;
-        const kmAtual = Number(formData.km);
-        return Number.isFinite(kmAtual) && Number.isFinite(kmAnterior) && kmAtual < kmAnterior;
-      }, [formData.km, kmAnterior]);
-
-      useEffect(() => {
-        if (tipo === 'RETORNO' && formData.veiculo) {
-          const lastOut = historico.slice().reverse().find(h => h.veiculo === formData.veiculo && h.status === 'FORA');
-          if (lastOut) setFormData(p => ({ ...p, motorista: lastOut.motorista || '', seguranca: lastOut.seguranca || '' }));
-        }
-      }, [formData.veiculo, tipo, historico]);
-
-      const handleSubmit = async (e) => {
-        e.preventDefault();
-        setErr('');
-
-        const { veiculo, motorista, seguranca, km, destino } = formData;
-        if (!veiculo || !motorista || !seguranca || km === '') {
-          setErr('Preencha todos os campos obrigatórios.');
-          return;
-        }
-
-        const kmNumero = Math.floor(Number(km));
-        if (!Number.isFinite(kmNumero) || kmNumero < 0) {
-          setErr('KM inválido. Informe um número inteiro não negativo.');
-          return;
-        }
-
-        if (isKmInvalido) {
-          setErr(`KM ATUAL INVÁLIDO. O valor (${kmNumero}) é menor que o anterior (${kmAnterior}).`);
-          return;
-        }
-
-        setLoading(true);
-
-        const payload = {
-          veiculo, motorista, seguranca,
-          status: tipo === 'SAIDA' ? 'FORA' : 'DISPONÍVEL',
-          destino: tipo === 'SAIDA' ? (destino || '---') : '---',
-        };
-
-        if (tipo === 'SAIDA') {
-          payload.kmSaida = kmNumero;
-        } else {
-          const reg = historico.slice().reverse().find(h => h.veiculo === veiculo && h.status === 'FORA');
-          payload.kmRetorno = kmNumero;
-          const kmSaidaHistorico = Number(reg?.kmSaida || 0);
-          payload.kmRodado = Math.max(0, payload.kmRetorno - kmSaidaHistorico);
-        }
-
-        const ok = await sheetsService.salvar(payload);
-        if (ok) {
-          onSucesso();
-        } else {
-          setErr('Erro ao salvar na planilha. Verifique a URL ou permissões.');
-          setLoading(false);
-        }
-      };
-
-      return (
-        <div className="px-6 pt-6 pb-10">
-          <button onClick={onVoltar} className="flex items-center gap-2 text-slate-400 font-black text-[9px] uppercase tracking-[0.2em] mb-4" aria-label="Voltar">
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="15 18 9 12 15 6"></polyline>
-            </svg>
-            VOLTAR
-          </button>
-
-          <div className="bg-white p-8 rounded-[2.5rem] shadow-sm">
-            <h2 className="text-xl font-black text-slate-800 uppercase tracking-[0.1em] mb-10 border-b border-slate-100 pb-6 text-center">
-              {tipo === 'SAIDA' ? 'REGISTRAR SAÍDA' : 'REGISTRAR ENTRADA'}
-            </h2>
-
-            {err && <div className="bg-rose-50 text-rose-600 text-[10px] font-bold p-3 rounded-xl mb-4">{err}</div>}
-
-            <form onSubmit={handleSubmit} className="space-y-5">
-              <div className="space-y-1">
-                <label htmlFor="veiculo" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Veículo</label>
-                <select id="veiculo" className="w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700 appearance-none" value={formData.veiculo} onChange={e => setFormData({ ...formData, veiculo: e.target.value })} required>
-                  <option value="">Selecione</option>
-                  {veiculosFiltrados.map(v => <option key={v} value={v}>{v}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label htmlFor="motorista" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motorista</label>
-                <select id="motorista" className="w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700 appearance-none" value={formData.motorista} onChange={e => setFormData({ ...formData, motorista: e.target.value })} required>
-                  <option value="">Selecione</option>
-                  {listas.motoristas.map(m => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <div className="flex justify-between items-center ml-1 mb-0.5">
-                  <label htmlFor="km" className="text-[10px] font-black text-slate-400 uppercase tracking-widest">KM Atual</label>
-                  {kmAnterior !== null && <span className="text-[10px] font-black text-rose-500 uppercase tracking-tighter">Anterior: {kmAnterior}</span>}
-                </div>
-                <input id="km" type="number" inputMode="numeric" className={`w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700 transition-all ${isKmInvalido?'bg-rose-50 ring-2 ring-rose-300':''}`} placeholder="00000" value={formData.km} onChange={e => setFormData({ ...formData, km: e.target.value })} required />
-                {isKmInvalido && (
-                  <div className="flex items-center gap-1.5 mt-1 ml-1 text-rose-500 animate-pulse">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
-                      <line x1="12" y1="9" x2="12" y2="13"></line>
-                      <line x1="12" y1="17" x2="12.01" y2="17"></line>
-                    </svg>
-                    <span className="text-[10px] font-black uppercase tracking-tight">ATENÇÃO: KM INFERIOR AO ANTERIOR!</span>
-                  </div>
-                )}
-              </div>
-
-              {tipo === 'SAIDA' && (
-                <div className="space-y-1">
-                  <label htmlFor="destino" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Destino</label>
-                  <input id="destino" type="text" className="w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700" placeholder="Onde?" value={formData.destino} onChange={e => setFormData({ ...formData, destino: e.target.value })} />
-                </div>
-              )}
-
-              <div className="space-y-1">
-                <label htmlFor="seguranca" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SEGURANÇA</label>
-                <select id="seguranca" className="w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700 appearance-none" value={formData.seguranca} onChange={e => setFormData({ ...formData, seguranca: e.target.value })} required>
-                  <option value="">Selecione</option>
-                  {listas.segurancas.map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-
-              <button type="submit" disabled={loading || isKmInvalido} className={`w-full py-5 rounded-2xl text-white font-black uppercase text-xs tracking-[0.2em] mt-6 shadow-xl transition-all ${isKmInvalido ? 'opacity-50 cursor-not-allowed grayscale' : ''} ${tipo === 'SAIDA' ? 'bg-rose-500 shadow-rose-500/30' : 'bg-emerald-500 shadow-emerald-500/30'}`}>
-                {loading ? 'Processando...' : 'Confirmar Registro'}
-              </button>
-            </form>
-          </div>
-        </div>
-      );
-    };
-
-    const App = () => {
-      const [view, setView] = useState('DASHBOARD');
-      const [listas, setListas] = useState({ veiculos: [], motoristas: [], segurancas: [] });
-      const [historico, setHistorico] = useState([]);
-      const [loading, setLoading] = useState(true);
-      const [showSettings, setShowSettings] = useState(!getUrl());
-      const [urlInput, setUrlInput] = useState(getUrl());
-      const [hasUrl, setHasUrl] = useState(Boolean(getUrl()));
-
-      const loadData = useCallback(async (silent = false) => {
-        if (!silent) setLoading(true);
-        try {
-          const [l, h] = await Promise.all([sheetsService.getListas(), sheetsService.getHistorico()]);
-          setListas(l || { veiculos: [], motoristas: [], segurancas: [] });
-          setHistorico(Array.isArray(h) ? h : []);
-        } finally {
-          setLoading(false);
-        }
-      }, []);
-
-      useEffect(() => { loadData(); }, [loadData]);
-
-      const salvarUrl = () => {
-        const u = urlInput.trim();
-        if (!isValidUrl(u)) {
-          alert('URL inválida. Deve ser um script do Google Apps Script com /exec');
-          return;
-        }
-        localStorage.setItem('FROTA_SCRIPT_URL', u);
-        setHasUrl(true);
-        location.reload();
-      };
-
-      return (
-        <div className="max-w-md mx-auto min-h-screen bg-[#F8FAFC] pb-10">
-          <header className="header-container relative px-8 flex flex-col items-center justify-center text-white overflow-hidden">
-            <div className="absolute top-4 left-6 flex items-center gap-2">
-              <div className="glass-btn px-3 py-1.5 rounded-full scale-90">
-                <span className="text-[7px] font-black uppercase tracking-widest">
-                  {hasUrl ? 'Ativo' : 'Offline'}
-                </span>
-              </div>
-            </div>
-
-            <div className="absolute top-4 right-6 flex items-center gap-3">
-              <button onClick={() => setShowSettings(true)} className="glass-btn p-3 rounded-2xl shadow-xl z-20 scale-90" aria-label="Abrir Configuração">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white">
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
-                </svg>
-              </button>
-            </div>
-
-            <div className="text-center">
-              <h1 className="text-4xl font-black italic tracking-tighter mb-2 uppercase">FROTA PRO</h1>
-              <div className="bg-emerald-400/20 border border-emerald-400/30 px-4 py-1 rounded-full inline-block">
-                <span className="text-[7px] font-black uppercase tracking-widest text-emerald-400">Sincronizado via Sheets</span>
-              </div>
-            </div>
-          </header>
-
-          {loading ? (
-            <div className="loader" aria-label="Carregando"></div>
-          ) : (
-            view === 'DASHBOARD'
-              ? <Dashboard listas={listas} historico={historico} onRefresh={() => loadData(true)} onAction={setView} />
-              : <Formulario tipo={view} listas={listas} historico={historico} onVoltar={() => setView('DASHBOARD')} onSucesso={() => { loadData(true); setView('DASHBOARD'); }} />
-          )}
-
-          {showSettings && (
-            <div className="fixed inset-0 z-[999] bg-slate-900/90 flex items-center justify-center p-8 backdrop-blur-md">
-              <div className="bg-white w-full rounded-[3rem] overflow-hidden shadow-2xl max-w-md">
-                <div className="bg-slate-800 p-6 text-white flex justify-between items-center">
-                  <span className="font-black uppercase tracking-widest text-[10px]">Configuração</span>
-                  <button onClick={() => setShowSettings(false)} className="p-2 bg-slate-700 rounded-xl" aria-label="Fechar Configuração">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <line x1="18" y1="6" x2="6" y2="18"></line>
-                      <line x1="6" y1="6" x2="18" y2="18"></line>
-                    </svg>
-                  </button>
-                </div>
-
-                <div className="p-8 space-y-6">
-                  <div className="text-center space-y-2">
-                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">URL do Script</p>
-                    <textarea className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] text-[10px] font-mono outline-none focus:border-emerald-500 transition-colors" rows="4" placeholder="Cole o link .exec" value={urlInput} onChange={e => setUrlInput(e.target.value)}></textarea>
-                  </div>
-
-                  <button onClick={salvarUrl} className="w-full py-5 bg-emerald-500 text-white rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] shadow-lg">
-                    Salvar URL
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <div className="text-center py-8 opacity-40">
-            <p className="text-[9px] font-black tracking-[0.5em] text-slate-500 uppercase italic">
-              By <span className="text-emerald-600">Ulbach</span>
-            </p>
-          </div>
-        </div>
-      );
-    };
-
-    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
-  </script>
+<div id="root"></div>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="text/babel">
+const {useState,useEffect,useCallback,useMemo} = React;
+const getUrl=()=>localStorage.getItem('FROTA_SCRIPT_URL')||'';
+const isValidUrl=u=>u.includes('script.google.com')&&u.includes('/exec');
+const jsonp=(url,cb)=>new Promise((res,rej)=>{const s=document.createElement('script');window[cb]=d=>{res(d);delete window[cb];s.remove()};s.src=url;s.onerror=()=>{rej();s.remove()};document.head.appendChild(s)});
+const sheetsService={
+getListas:async()=>{const u=getUrl();if(!u)return{veiculos:[],motoristas:[],segurancas:[]};try{return await jsonp(`${u}?action=getlistas&_ts=${Date.now()}`,'listaCallback')}catch{return{veiculos:[],motoristas:[],segurancas:[]}}},
+getHistorico:async()=>{const u=getUrl();if(!u)return[];try{const d=await jsonp(`${u}?action=gethistorico&_ts=${Date.now()}`,'historicoCallback');return Array.isArray(d)?d:[]}catch{return[]}},
+salvar:async(dados)=>{const u=getUrl();if(!u)return!1;return new Promise(res=>{const fid='frm'+Date.now(),ifr=document.createElement('iframe'),frm=document.createElement('form');ifr.name=fid;ifr.style.display='none';frm.method='POST';frm.target=fid;frm.action=u;frm.enctype='text/plain';const inp=document.createElement('input');inp.name='postData';inp.value=JSON.stringify(dados);frm.appendChild(inp);document.body.appendChild(ifr);document.body.appendChild(frm);window.salvoCallback=r=>{res(r.ok);cleanup()};const cleanup=()=>{ifr.remove();frm.remove();delete window.salvoCallback};frm.submit();setTimeout(()=>{res(!1);cleanup()},5000)})}
+};
+const Dashboard=({listas,historico,onAction,onRefresh})=>{
+const historicoMemo=useMemo(()=>historico.slice().reverse().slice(0,5),[historico]);
+const fmt=d=>d?new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'--/-- --:--';
+return (
+<div className="px-6 mt-14 space-y-8 pb-10">
+<div className="grid grid-cols-2 gap-4">
+<button onClick={()=>onAction('SAIDA')} className="action-card p-6 flex flex-col items-center gap-4 text-center border border-white"><div className="w-14 h-14 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></div><span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Reg. Saída</span></button>
+<button onClick={()=>onAction('RETORNO')} className="action-card p-6 flex flex-col items-center gap-4 text-center border border-white"><div className="w-14 h-14 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"></path><polyline points="10 17 15 12 10 7"></polyline><line x1="15" y1="12" x2="3" y2="12"></line></svg></div><span className="text-[11px] font-black uppercase tracking-widest text-slate-700">Reg. Entrada</span></button>
+</div>
+<div className="space-y-4">
+<div className="flex justify-between items-center px-2"><div className="flex items-center gap-2 opacity-40"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg><h2 className="text-[10px] font-black uppercase tracking-widest">Movimentação (Top 5)</h2></div><button onClick={onRefresh} className="text-slate-300 hover:text-emerald-500 transition-transform active:rotate-180"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg></button></div>
+<div className="space-y-3">{historicoMemo.map((log,i)=>(
+<div key={i} className="bg-white p-5 rounded-[1.8rem] flex items-center gap-4 shadow-sm border border-white">
+<div className="w-12 h-12 bg-slate-50 text-slate-400 rounded-2xl flex items-center justify-center shrink-0"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 16l-4-4-4 4"></path><line x1="18" y1="8" x2="6" y2="8"></line><line x1="6" y1="16" x2="18" y2="16"></line></svg></div>
+<div className="flex-1 min-w-0">
+<h3 className="font-bold text-slate-800 text-[13px] uppercase tracking-tight truncate">{log.veiculo}</h3>
+<p className="text-[10px] text-slate-400 font-bold uppercase truncate mb-1">{log.motorista}</p>
+<div className="flex items-center gap-1.5 opacity-60"><svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg><span className="text-[9px] font-bold text-slate-500 uppercase">{fmt(log.status==='FORA'?log.datasaida:log.dataretorno)}</span></div>
+</div>
+<div className={`status-pill ${log.status==='FORA'?'status-pill-out':''}`}>{log.status==='FORA'?'Em Uso':'Pátio'}</div>
+</div>))}{!historicoMemo.length&&<p className="text-center text-[10px] text-slate-400 font-bold">Nenhum registro encontrado</p>}</div>
+</div>
+</div>
+);};
+const Formulario=({tipo,listas,historico,onSucesso,onVoltar})=>{
+const [loading,setLoading]=useState(false);
+const [formData,setFormData]=useState({veiculo:'',motorista:'',seguranca:'',km:'',destino:''});
+const [err,setErr]=useState('');
+const veiculosFiltrados=useMemo(()=>{const fora=historico.filter(h=>h.status==='FORA').map(h=>h.veiculo);return tipo==='SAIDA'?listas.veiculos.filter(v=>!fora.includes(v)):listas.veiculos.filter(v=>fora.includes(v))},[tipo,listas.veiculos,historico]);
+const kmAnterior=useMemo(()=>{if(!formData.veiculo)return null;const entries=historico.filter(h=>h.veiculo===formData.veiculo);if(!entries.length)return null;const last=entries[entries.length-1];return last.status==='FORA'?last.kmretorno:last.kmsaida},[formData.veiculo,historico]);
+const isKmInvalido=useMemo(()=>kmAnterior!==null&&formData.km&&Number(formData.km)<Number(kmAnterior),[formData.km,kmAnterior]);
+useEffect(()=>{if(tipo==='RETORNO'&&formData.veiculo){const lastOut=historico.slice().reverse().find(h=>h.veiculo===formData.veiculo&&h.status==='FORA');if(lastOut)setFormData(p=>({...p,motorista:lastOut.motorista||'',seguranca:lastOut.seguranca||''}))}},[formData.veiculo,tipo,historico]);
+const handleSubmit=async(e)=>{e.preventDefault();setErr('');if(!formData.veiculo||!formData.motorista||!formData.seguranca||!formData.km){setErr('Preencha todos os campos obrigatórios.');return;}if(isKmInvalido){setErr(`KM ATUAL INVÁLIDO. O valor (${formData.km}) é menor que o anterior (${kmAnterior}).`);return;}setLoading(true);const payload={veiculo:formData.veiculo,motorista:formData.motorista,seguranca:formData.seguranca,status:tipo==='SAIDA'?'FORA':'DISPONÍVEL',destino:formData.destino||'---'};if(tipo==='SAIDA')payload.kmSaida=Number(formData.km);else{const reg=historico.slice().reverse().find(h=>h.veiculo===formData.veiculo&&h.status==='FORA');payload.kmRetorno=Number(formData.km);payload.kmRodado=payload.kmRetorno-(Number(reg?.kmsaida)||0);}const ok=await sheetsService.salvar(payload);if(ok)onSucesso();else{setErr('Erro ao salvar na planilha. Verifique a URL ou permissões.');setLoading(false);}};
+return (
+<div className="px-6 pt-6 pb-10">
+<button onClick={onVoltar} className="flex items-center gap-2 text-slate-400 font-black text-[9px] uppercase tracking-[0.2em] mb-4"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>VOLTAR</button>
+<div className="bg-white p-8 rounded-[2.5rem] shadow-sm">
+<h2 className="text-xl font-black text-slate-800 uppercase tracking-[0.1em] mb-10 border-b border-slate-100 pb-6 text-center">{tipo==='SAIDA'?'REGISTRAR SAÍDA':'REGISTRAR ENTRADA'}</h2>
+{err&&<div className="bg-rose-50 text-rose-600 text-[10px] font-bold p-3 rounded-xl mb-4">{err}</div>}
+<form onSubmit={handleSubmit} className="space-y-5">
+<div className="space-y-1"><label htmlFor="veiculo" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Veículo</label><select id="veiculo" className="w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700 appearance-none" value={formData.veiculo} onChange={e=>setFormData({...formData,veiculo:e.target.value})} required><option value="">Selecione</option>{veiculosFiltrados.map(v=><option key={v} value={v}>{v}</option>)}</select></div>
+<div className="space-y-1"><label htmlFor="motorista" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Motorista</label><select id="motorista" className="w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700 appearance-none" value={formData.motorista} onChange={e=>setFormData({...formData,motorista:e.target.value})} required><option value="">Selecione</option>{listas.motoristas.map(m=><option key={m} value={m}>{m}</option>)}</select></div>
+<div className="space-y-1"><div className="flex justify-between items-center ml-1 mb-0.5"><label htmlFor="km" className="text-[10px] font-black text-slate-400 uppercase tracking-widest">KM Atual</label>{kmAnterior!==null&&<span className="text-[10px] font-black text-rose-500 uppercase tracking-tighter">Anterior: {kmAnterior}</span>}</div><input id="km" type="number" className={`w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700 transition-all ${isKmInvalido?'bg-rose-50 ring-2 ring-rose-300':''}`} placeholder="00000" value={formData.km} onChange={e=>setFormData({...formData,km:e.target.value})} required/>{isKmInvalido&&<div className="flex items-center gap-1.5 mt-1 ml-1 text-rose-500 animate-pulse"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg><span className="text-[10px] font-black uppercase tracking-tight">ATENÇÃO: KM INFERIOR AO ANTERIOR!</span></div>}</div>
+{tipo==='SAIDA'&&<div className="space-y-1"><label htmlFor="destino" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Destino</label><input id="destino" type="text" className="w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700" placeholder="Onde?" value={formData.destino} onChange={e=>setFormData({...formData,destino:e.target.value})}/></div>}
+<div className="space-y-1"><label htmlFor="seguranca" className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">SEGURANÇA</label><select id="seguranca" className="w-full bg-slate-50 border-none rounded-xl px-4 py-4 outline-none text-slate-700 appearance-none" value={formData.seguranca} onChange={e=>setFormData({...formData,seguranca:e.target.value})} required><option value="">Selecione</option>{listas.segurancas.map(s=><option key={s} value={s}>{s}</option>)}</select></div>
+<button type="submit" disabled={loading||isKmInvalido} className={`w-full py-5 rounded-2xl text-white font-black uppercase text-xs tracking-[0.2em] mt-6 shadow-xl transition-all ${isKmInvalido?'opacity-50 cursor-not-allowed grayscale':''} ${tipo==='SAIDA'?'bg-rose-500 shadow-rose-500/30':'bg-emerald-500 shadow-emerald-500/30'}`}>{loading?'Processando...':'Confirmar Registro'}</button>
+</form>
+</div>
+</div>
+);};
+const App=()=>{
+const [view,setView]=useState('DASHBOARD');
+const [listas,setListas]=useState({veiculos:[],motoristas:[],segurancas:[]});
+const [historico,setHistorico]=useState([]);
+const [loading,setLoading]=useState(true);
+const [showSettings,setShowSettings]=useState(!getUrl());
+const [urlInput,setUrlInput]=useState(getUrl());
+const loadData=useCallback(async(silent=false)=>{if(!silent)setLoading(true);try{const[l,h]=await Promise.all([sheetsService.getListas(),sheetsService.getHistorico()]);setListas(l||{veiculos:[],motoristas:[],segurancas:[]});setHistorico(Array.isArray(h)?h:[])}finally{setLoading(false)}},[]);
+useEffect(()=>{loadData()},[loadData]);
+return (
+<div className="max-w-md mx-auto min-h-screen bg-[#F8FAFC] pb-10">
+<header className="header-container relative px-8 flex flex-col items-center justify-center text-white overflow-hidden">
+<div className="absolute top-4 left-6 flex items-center gap-2"><div className="glass-btn px-3 py-1.5 rounded-full scale-90"><span className="text-[7px] font-black uppercase tracking-widest">{getUrl()?'Ativo':'Offline'}</span></div></div>
+<div className="absolute top-4 right-6 flex items-center gap-3"><button onClick={()=>setShowSettings(true)} className="glass-btn p-3 rounded-2xl shadow-xl z-20 scale-90"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg></button></div>
+<div className="text-center"><h1 className="text-4xl font-black italic tracking-tighter mb-2 uppercase">FROTA PRO</h1><div className="bg-emerald-400/20 border border-emerald-400/30 px-4 py-1 rounded-full inline-block"><span className="text-[7px] font-black uppercase tracking-widest text-emerald-400">Sincronizado via Sheets</span></div></div>
+</header>
+{loading?<div id="root"></div>:view==='DASHBOARD'?<Dashboard listas={listas} historico={historico} onRefresh={()=>loadData(true)} onAction={setView}/>:<Formulario tipo={view} listas={listas} historico={historico} onVoltar={()=>setView('DASHBOARD')} onSucesso={()=>{loadData(true);setView('DASHBOARD')}}/>}
+{showSettings&&<div className="fixed inset-0 z-[999] bg-slate-900/90 flex items-center justify-center p-8 backdrop-blur-md"><div className="bg-white w-full rounded-[3rem] overflow-hidden shadow-2xl"><div className="bg-slate-800 p-6 text-white flex justify-between items-center"><span className="font-black uppercase tracking-widest text-[10px]">Configuração</span><button onClick={()=>setShowSettings(false)} className="p-2 bg-slate-700 rounded-xl"><svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg></button></div><div className="p-8 space-y-6"><div className="text-center space-y-2"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">URL do Script</p><textarea className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[1.5rem] text-[10px] font-mono outline-none focus:border-emerald-500 transition-colors" rows="4" placeholder="Cole o link .exec" value={urlInput} onChange={e=>setUrlInput(e.target.value)} /></div><button onClick={()=>{if(!isValidUrl(urlInput.trim())){alert('URL inválida. Deve ser um script do Google Apps Script com /exec');return;}localStorage.setItem('FROTA_SCRIPT_URL',urlInput.trim());location.reload();}} className="w-full py-5 bg-emerald-500 text-white rounded-[1.5rem] font-black uppercase text-xs tracking-[0.2em] shadow-lg">Salvar URL</button></div></div></div>}
+<div className="text-center py-8 opacity-40"><p className="text-[9px] font-black tracking-[0.5em] text-slate-500 uppercase italic">By <span className="text-emerald-600">Ulbach</span></p></div>
+</div>
+);};
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
 </body>
 </html>
