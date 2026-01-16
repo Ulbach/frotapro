@@ -31,15 +31,12 @@ select,input{font-size:14px!important;font-weight:500!important}
 const {useState,useEffect,useCallback,useMemo} = React;
 const getUrl=()=>localStorage.getItem('FROTA_SCRIPT_URL')||'';
 const isValidUrl=u=>u.includes('script.google.com')&&u.includes('/exec');
-const jsonp=(url,cb)=>new Promise((res,rej)=>{const s=document.createElement('script');window[cb]=d=>{res(d);delete window[cb];s.remove()};s.src=url;s.onerror=()=>{rej();s.remove()};document.head.appendChild(s)};
-
-// ---------- NOVO: SALVA SEM CORS ----------
+const jsonp=(url,cb)=>new Promise((res,rej)=>{const s=document.createElement('script');window[cb]=d=>{res(d);delete window[cb];s.remove()};s.src=url;s.onerror=()=>{rej();s.remove()};document.head.appendChild(s)});
 const sheetsService={
 getListas:async()=>{const u=getUrl();if(!u)return{veiculos:[],motoristas:[],segurancas:[]};try{return await jsonp(`${u}?action=getlistas&_ts=${Date.now()}`,'listaCallback')}catch{return{veiculos:[],motoristas:[],segurancas:[]}}},
 getHistorico:async()=>{const u=getUrl();if(!u)return[];try{const d=await jsonp(`${u}?action=gethistorico&_ts=${Date.now()}`,'historicoCallback');return Array.isArray(d)?d:[]}catch{return[]}},
-salvar:async(dados)=>{const u=getUrl();if(!u)return!1;return new Promise(res=>{window.addEventListener('message',function ok(e){if(e.data&&typeof e.data.ok==='boolean'){res(e.data.ok);window.removeEventListener('message',ok)}},false);const img=new Image();img.src=`${u}?action=salvar&data=${encodeURIComponent(JSON.stringify(dados))}`})}
+salvar:async(dados)=>{const u=getUrl();if(!u)return!1;return new Promise(res=>{const fid='frm'+Date.now(),ifr=document.createElement('iframe'),frm=document.createElement('form');ifr.name=fid;ifr.style.display='none';frm.method='POST';frm.target=fid;frm.action=u;frm.enctype='text/plain';const inp=document.createElement('input');inp.name='postData';inp.value=JSON.stringify(dados);frm.appendChild(inp);document.body.appendChild(ifr);document.body.appendChild(frm);window.salvoCallback=r=>{res(r.ok);cleanup()};const cleanup=()=>{ifr.remove();frm.remove();delete window.salvoCallback};frm.submit();setTimeout(()=>{res(!1);cleanup()},5000)})}
 };
-
 const Dashboard=({listas,historico,onAction,onRefresh})=>{
 const historicoMemo=useMemo(()=>historico.slice().reverse().slice(0,5),[historico]);
 const fmt=d=>d?new Date(d).toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}):'--/-- --:--';
